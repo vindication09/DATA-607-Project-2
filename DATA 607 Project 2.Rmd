@@ -1,0 +1,460 @@
+---
+title: "DATA 607 Project 2"
+author: "Vinicio Haro"
+date: "3/10/2018"
+output: html_document
+---
+
+
+Choose any of the three wide datasets identified in the week 6 discussion items. (You may choose your own)
+Read the information from your csv into R and use tidyR and dplyr as needed to transform the data. 
+Perform the analysis requested in the discussion item. 
+
+Population Dataset
+Steven Tipton shared this data set in the discussion items 
+The following steps are requested:
+1) Melt the data into a Tidy format with just country, year, and population 
+2) Explore the NA's and -- and research notable events that could have caused change in population 
+3) Remove entries for Eurasia, North America, and World such as to only have country
+4) See how population changes around the world after political shifts 
+5) Add a column that classifies countries to continents 
+
+This data set stood out to me because I think it is really interesting to see how populations changed over time for certain nations. There are also reasons why there have been population shifts and I want to highlight some of them in my analysis in a very easy to read visualization.
+
+Load Libraries
+Any additional libraries will be loaded in as needed
+```{r}
+library(tidyr)
+library(dplyr)
+library(readr)
+library(RCurl)
+```
+
+Read in the data which can be found using the link below:
+https://raw.githubusercontent.com/vindication09/DATA-607-Project-2/master/populationbycountry19802010millions.csv
+
+I will read in the data from a location on my own machine 
+```{r}
+library(readr)
+populationbycountry19802010millions <- read_csv("~/Desktop/DATA Science SPS/DATA 607/Week 5:6/Project2Data/populationbycountry19802010millions.csv")
+head(populationbycountry19802010millions)
+```
+
+I want to rename column 1. It is currently called X1, however I want this to be my country column 
+```{r}
+colnames(populationbycountry19802010millions)[which(names(populationbycountry19802010millions) == "X1")] <- "Country"
+head(populationbycountry19802010millions, 2)
+```
+
+I want to create a column that classifies countries into continents. There is a library that allows us to do this called "countrycode." Before we use this package, we need to do some data prep by removing entries that cant be classified. The classification only works for the mapping country to continent 
+
+lets remove items that are not countries such as North America,Eurasia... 
+-North America
+-Central & South America
+-Antarctica
+-Eurasia
+-Middle East 
+-Asia & Oceania
+-World
+-Africa
+-Europe
+-Former Czechoslovakia
+-Former Serbia and Montenegro
+-Former Yugoslavia
+-East
+-Hawaiian Trade Zone
+-U.S. Pacific Islands
+-Wake Island
+-Former U.S.S.R.
+
+It was easy to identify which entries to remove. The first time I ran this function, I was given a warning message that showed a list of entries that could not be classified. I simply copy and pasted this list from the warning and used it as my driving vector to remove them from my data.
+
+```{r}
+#Make a vector that lists all the countries that could not be classified by country code
+remove<- c('North America', 'Central & South America', 'Antarctica', 
+                                'Eurasia', 'Middle East', 
+                                'Asia & Oceania', 
+                                'World', 'Africa', 'Europe', 
+           'Former Czechoslovakia', 'Former Serbia and Montenegro', 'Former Yugoslavia', 
+           'East', 'Hawaiian Trade Zone', 'U.S. Pacific Islands', 'Wake Island', 'Former U.S.S.R.')
+
+dfpop <- populationbycountry19802010millions[ !grepl(paste(remove, collapse="|"), populationbycountry19802010millions$Country),]
+
+head(dfpop, 2)
+```
+
+We also need to convert the data into a data frame or else country code will not work. 
+```{r}
+df.pop2<-data.frame(dfpop)
+nrow(df.pop2)
+head(df.pop2)
+```
+
+I am not sure why this happened but by converting to a data frame, all of my year columns have an X in front of the name. We can use some regular expression to clean the column names. 
+```{r}
+#remove the x
+names(df.pop2) <- gsub(x = names(df.pop2), pattern = "\\X", replacement = "")  
+names(df.pop2)
+head(df.pop2, 2)
+```
+
+The data is now prepped for country code. 
+This is going to scan the Country columns and produce a list of their associated Continents in its own data frame. We can append this data frame to our original df.pop2 to complete the task of adding a contient column to each country. 
+
+
+```{r}
+#Lets classify country names into their Continents using the countrycode library 
+library(countrycode)
+df.continent <- as.factor(countrycode(sourcevar = df.pop2[, "Country"], origin = "country.name", destination = "continent"))
+df.continent<-data.frame(df.continent)
+nrow(df.continent)
+head(df.continent)
+```
+
+```{r}
+#now append continent as its own column 
+df.countries<-data.frame(df.continent, df.pop2)
+head(df.countries)
+```
+
+We rename the Continent column to complete the task 
+```{r}
+#rename, we now have added a column that classifies countries into continents 
+colnames(df.countries)[which(names(df.countries) == "df.continent")] <- "Continent"
+names(df.countries)
+```
+
+The X came back in front of the year columns. I have no answer as to why this happened but I know how to fix it. 
+```{r}
+names(df.countries) <- gsub(x = names(df.countries), pattern = "\\X", replacement = "")  
+names(df.countries)
+```
+```{r}
+head(df.countries)
+```
+
+We can use tidyr to transform the data. This data is in wide format using key value pairs. 
+I want to gather by key value pairs and create a new long data frame
+```{r}
+#Lets gather by key value pairs and create a new data frame 
+longdf.pop <- df %>% gather(data=df.countries, Population, "1980":"2010")
+head(longdf.pop, 10)  
+tail(longdf.pop, 10)
+```
+
+I need to rename the year column 
+```{r}
+colnames(longdf.pop)[colnames(longdf.pop)=="."]<-"Year"
+names(longdf.pop)
+```
+
+I made the choice to remove rows that contained NA's but keep the rows that were blank. This does not imply that population is zero, but rather no population was recorded or the country was not established/does not exist at that time. 
+
+```{r}
+longdf.pop<-na.omit(longdf.pop)
+head(longdf.pop)
+```
+
+For looking at the change in populations for certain countries, we only need Country, Year, and Population. I will make a subset with just these three columns. In addition, I will examine a country that has blank entries for certain years. In this case I selected Aruba. 
+```{r}
+df.aruba<-subset(longdf.pop, Country=='Aruba', select=c(Country, Year, Population))
+head(df.aruba, 30)
+```
+
+After doing some research online, I learned that Aruba became a self governing country in 1986 after it gained left the Netherlands. Was there a trend in the population of Aruba after it became an established nation? 
+
+```{r}
+#Lets quickly visualize 
+library(ggplot2)
+ggplot(data=df.aruba, aes(x=Year, y=Population, group=1)) +
+  geom_line(arrow = arrow())+
+  geom_point()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  labs( x="Year", y="Population (In Millions)")
+
+```
+
+Now I want to examine how population changed over time after a major political event. Lets say I want to see how the population of Cuba changed after the events of the cold war. The cold war resulted in an embargo placed on Cuba. I know that at some point, there was a mass exodus of migrants coming to the United States from Cuba. Castro's government sent many of its own citizens into exile, including top performers of their time such as Celia Cruz. 
+
+More info on the migration of Cubans can be found here:
+https://www.migrationpolicy.org/article/cuban-immigrants-united-states
+
+```{r}
+df.cuba<-subset(longdf.pop, Country=='Cuba', select=c(Country, Year, Population))
+head(df.cuba)
+```
+
+```{r}
+#Visualize the population 
+ggplot(data=df.cuba, aes(x=Year, y=Population, group=1)) +
+  geom_line(arrow = arrow())+
+  geom_point()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  labs( x="Year", y="Population (In Millions)")
+```
+
+There was a massive decline in the Cuban population between 1984 and 1985. This information matches up with the document shared via link. After 1985, the Cuban population has a steady increase. The exiles loyal to the Batista regime died out while new generations were born under the Castro regime. 
+
+
+
+Movie Data Set:
+This data was shared by Meaghan Burke 
+The following steps are requested:
+1) Deal with missing data 
+2) rename columns - There are several columns so I will rename those columns that I use in my analysis.
+
+I selected this data set because I am a huge fan of movies. I usually watch 4-5 movies a week if time permits.
+
+As for analysis, there were no furthur requested items so I will visually examine the budget vs gross for my favorite franchise "Star Wars." Any additional anlysis will be shown below. 
+
+Read in the data
+```{r}
+movies <- read_csv(getURL("https://raw.githubusercontent.com/vindication09/DATA-607-Project-2/master/movie_metadata.csv"))
+head(movies,3)
+nrow(movies)
+names(movies)
+```
+
+Lets check the number of NA's and blanks by column 
+```{r}
+colSums(is.na(movies)|movies == '')
+```
+
+It looks like gross year has the most NA and or blank entries with a total of 884
+This does not imply that there was no gross earnings but rather no such information was collected 
+lets compare movie budget and gross, however to compare I would need to remove the NA's and blanks. Hopefully this will not affect the Star Wars movies. 
+
+```{r}
+movies2<-na.omit(movies)
+nrow(movies2) #This brings us down from 5043 rows to 2752
+
+```
+
+I want a data frame that collects movie title, budget, and gross for Star Wars Films
+Star Wars: Episode VII - The Force Awakens
+Star Wars: Episode II - Attack of the Clones
+Star Wars: Episode III - Revenge of the Sith
+Star Wars: Episode I - The Phantom Menace 
+Star Wars: Episode VI - Return of the Jedi
+Star Wars: Episode V - The Empire Strikes Back
+Star Wars: Episode IV - A New Hope
+
+If I am lucky, then the Star Wars movies are stil there because they did not have any missing rows. 
+I find it time consuming to manually type the full names of the Star wars films. I will use a wild card with an anchor to subset them instead. 
+```{r}
+#we can use a wild card to select all the rows associated with star wars films 
+moviecost.df<-movies2[grep("^Star Wars:", movies2$movie_title), ]
+head(moviecost.df)
+```
+
+I need movie title, budget, and gross 
+```{r}
+#i only need movie_title, budget, and gross
+starwars.df<-subset(moviecost.df, select=c(movie_title, budget, gross))
+head(starwars.df)
+starwars.df<-data.frame(starwars.df)
+```
+
+I want to melt this subset using the reshape library to make the use of ggplot to better. 
+```{r}
+#melt into long dataframe 
+library(reshape2)
+swmelt <- melt(starwars.df, id = 'movie_title')
+head(swmelt, 15)
+```
+
+Lets create a stacked bar plot that looks at the gross vs budget for each of the Star Wars Films 
+```{r}
+#I want to visually compare the performance of star wars movies by comparing budget to gross 
+library("ggplot2")
+
+ggplot() + geom_bar(aes(y = value, x = movie_title, fill =variable ), data = swmelt,stat="identity")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  labs( x="Star Wars Film", y="Dollar Amount")
+
+```
+
+It appears that the budget for each of the Star Wars films was bigger than its gross. I would be interested in knowing if this is just at the film release or does it also take DVD/Blu ray sales into account. 
+
+I want to examine a correlation between movie rating and number of social media likes. 
+I will need movie title, imdb score, and movie facebook likes. These are also fields that can be renamed. 
+
+Lets make a subet of the three columns we want and see if it is necessary to perform any transformations 
+```{r}
+movielikesdf<-subset(movies, select=c(movie_title, imdb_score, movie_facebook_likes))
+head(movielikesdf)
+```
+
+I notice that there are movies that do not have any facebook likes. It should be noted that this does not imply there were no likes but for some reason, that information was not collected. 
+
+There are 2181 entries that have a zero value for facebook likes. I would remove them because they would not add any inisght into the study of relationship between social media likes and movie score. Furthur data collection is required. 
+```{r}
+colSums(movielikesdf == '0')
+```
+
+We should also check if there are NA values
+```{r}
+colSums(is.na(movielikesdf))
+```
+
+Lets remove the zero rows and perform a simple correlation on movie rating and number of facebook likes. 
+```{r}
+movielikesdf[-row(movielikesdf)[movielikesdf == 0],]
+```
+
+Lets run a simple correlation test
+Visually
+```{r}
+library("ggpubr")
+ggscatter(movielikesdf, x="imdb_score", y="movie_facebook_likes" , 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "pearson",
+          xlab = "IMDB Score", ylab = "Facebook Likes")
+```
+
+I can get a better story with a numerical test such as a Pearson Correlation Test 
+```{r}
+x<-movielikesdf$imdb_score
+y<-movielikesdf$movie_facebook_likes
+res <- cor.test(x, y, 
+                    method = "pearson")
+res
+```
+
+Our t statistic is 18.102 with 5041 degrees of freedom. Our P value is small and we also have a confidence interval. If I pick my alpha to be .05, then I can conclude that IMDB rating and facebook likes are  correlated with a correlation coefficient of 0.247. The correlation coefficient shows a weak positive relationship. Because of the weak correlation coefficient, I would want more information such as if the facebook likes came after or before a movies release. Some movies are hyped up collecting lots of facebook likes before it is actually release. I would wonder if this is the case here. It would be great to be able to partition the likes into pre release likes and post release likes. 
+
+
+Sample Web Traffic Data 
+This final dataset is my own data set. It is similar to the type of data I work with in media, specifically web traffic. I am unable to supply actual data due to legal but I can simluate data that looks exactly similar . 
+
+The type of data has user level granularity. When a visitor comes to our site and engages in content such as watching a video, reading an article, or checking stock quotes, they are identified with a unique id and their behaviors are on the site are collected. We usually collect about 1 TB of data a day and our engineering team aggregates the data into a monthly format. 
+
+Lets simulate some data 
+For the sake of the problem, we will just generate 10 unique ids and randomly assign attributes to them
+```{r}
+#This will simulate unique strings that look like user ids 
+library(stringi)
+x<-stri_rand_strings(10, 6)
+df.x<-data.frame(as.character(x))
+df.x
+```
+
+We then assign each user a professional group they are associated with. Some values will include junk.
+```{r}
+progroups<-c("Finance", "HR", "IT", "Tech", "NULL", "Finance", "IT", "HR", "Finance", "Finance")
+df.progroups<-data.frame(as.character(progroups))
+df.progroups
+```
+
+We randomly assign users a Country. Country is usually identified using the user agent that is attached to a visitor coming to our site. The user agent also contains information on a visitors browser type or operating system. These are known as technographics. 
+```{r}
+country<-c("US","Canada","South Korea","US", "US", "Mexico", "France","Colombia","US", "Private")
+df.country<-data.frame(as.character(country))
+df.country
+```
+
+Lets randomly assign users a referral domain. This is simply where a visitor came from before coming to our site. An example would be a user seeing a link on facebook shared by my company , so they click on it. This users referral domain would simply be facebook. This attribute has been known to show lots of junk values. This could be because of private browser settings or the usage of VPNs. 
+
+```{r}
+refdom<-c("yahoo","NULL","fb", "Twitter", "NULL", "#g45y6", "Yahoo","ggggggggg", "Website","Facebook")
+df.refdom<-data.frame(as.character(refdom))
+df.refdom
+```
+
+Now lets simulate the number of hits on a specific page per user. This is the number of times a user engaged with the content on our finance page or our politics page. Engage is a blanket term that covers clicks, mouse hovers, and video watching. It is not unsual to see a single user coming to a page more than 100 times. We actually have a way to monitor page refreshes. Someone might land on a page and squat on that page. Each page refreshes every minute so that would count as a hit. 
+
+For now, lets say we only have 4 pages we are interested in collecting user information on
+```{r}
+FinanceHits<-c("12","45", "89", "0", 'NULL',"20","21", "NULL", "NULL", "67")
+PoliticsHits<-c("34","89","398","473", "42", '933',"57", "NULL","0", "45")
+NewsHits<-c("44","4982", "879","490","624", "903", "8933", "NULL", "902","270")
+BusinessHits<-c("12", "532", "90", "493", "909", "47", "3", "0", "2", "1")
+df.hits<-data.frame(FinanceHits, PoliticsHits, NewsHits, BusinessHits)
+df.hits
+```
+
+lets put together our sample data frame 
+```{r}
+sample.df<-data.frame(df.x,df.progroups,df.country, df.refdom, df.hits)
+sample.df
+```
+
+```{r}
+colnames(sample.df)[colnames(sample.df)=="as.character.x."] <- "visitorID"
+colnames(sample.df)[colnames(sample.df)=="as.character.progroups."] <- "ProGroup"
+colnames(sample.df)[colnames(sample.df)=="as.character.country."] <- "Country"
+colnames(sample.df)[colnames(sample.df)=="as.character.refdom."] <- "ReferralDomain"
+head(sample.df) 
+```
+
+We now have a sample wide format that simlates web traffic data at the user level. We can proceed to performing transformations as needed on the data set. 
+
+Since this sample data is small, if I remove user 5oplek, then I will no longer have a value for hits. If I were to model on this data realistically, removing users would not be a problem because the data contains millions of users. 
+
+I want to look at the number of hits to a page grouped by professional group. 
+```{r}
+longsample <- sample.df %>% gather(data=sample.df, value, FinanceHits:BusinessHits)
+head(longsample, 20)  
+```
+
+We now have a long data frame that can be subset to answer the first question. Compare the number of hits to  page type by professional groups. 
+I notive that there are NULL values. Since they won't add anything to the analysis, I can remove those rows. 
+```{r}
+longsample2<-longsample[!grepl("NULL", longsample$value),]
+head(longsample2, 20)
+```
+
+We should rename the pro group column and any other column that needs a proper name 
+```{r}
+colnames(longsample2)[colnames(longsample2)=="."] <- "Page"
+colnames(longsample2)[colnames(longsample2)=="value"] <- "Hits"
+head(longsample2)
+```
+
+
+We now have a long data frame. If we want to use dplyr to compare the number of hits by pro group, it is better to use the wide version of the data frame. We can go ahead and remove rows that contain null values. 
+
+```{r}
+sample.df2<-sample.df[!grepl("NULL", sample.df$FinanceHits),]
+sample.df2<-data.frame(sample.df2)
+head(sample.df2, 8)
+```
+
+Before I do any comparisons, I need to check the data types. The mean in dplyr wont work if the hits columns are not numeric. 
+```{r}
+str(sample.df2)
+```
+
+```{r}
+sample.df2$FinanceHits<-as.numeric(sample.df2$FinanceHits)
+sample.df2$PoliticsHits<-as.numeric(sample.df2$PoliticsHits)
+sample.df2$NewsHits<-as.numeric(sample.df2$NewsHits)
+sample.df2$BusinessHits<-as.numeric(sample.df2$BusinessHits)
+```
+
+
+We use dplyr to compare the number of hits to a page grouped by progroup. 
+```{r}
+sample.df2 %>%
+  group_by(ProGroup)%>% 
+  summarise(Mean_Financehits = mean(FinanceHits, na.rm=TRUE), 
+            Mean_Politicshits=mean(PoliticsHits, na.rm=TRUE), 
+            Mean_NewsHits=mean(NewsHits, na.rm=TRUE), 
+            Mean_BusinessHits=mean(BusinessHits, na.rm=TRUE))
+```
+
+
+On average, people that identify as a finance professional seem to be engaging with the news pages more than the other pages. With this insight, the teams across the editorial can figure out where are the finance pros getting the latest in finance news. 
+
+We can also group by attributes. In the case of our sample data, we have one attribute which is the referral domain. In actual web traffic, we have hundreds of columns for attributes such as brand, topic, adcode, transport, etc. 
+
+```{r}
+sample.df2 %>%
+  group_by(ReferralDomain)%>% 
+  summarise(Mean_Financehits = mean(FinanceHits, na.rm=TRUE), 
+            Mean_Politicshits=mean(PoliticsHits, na.rm=TRUE), 
+            Mean_NewsHits=mean(NewsHits, na.rm=TRUE), 
+            Mean_BusinessHits=mean(BusinessHits, na.rm=TRUE))
+```
+
+I notice that there are junk ref doms. Lets say I wanted to see the engagement of just users that come from social media. I can identify that users from facebook are going to finance content on average more than other content. I see that twitter users are going to Politics content on average than other content. 
